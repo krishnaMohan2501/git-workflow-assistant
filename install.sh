@@ -41,6 +41,17 @@ else
     wget -q "${REPO_URL}/raw/main/git-workflow.sh" -O "$INSTALL_DIR/git-workflow.sh"
 fi
 
+# Fix line endings (Windows CRLF → Unix LF)
+echo -e "${BLUE}Fixing line endings...${NC}"
+if command -v dos2unix >/dev/null 2>&1; then
+    dos2unix "$INSTALL_DIR/git-workflow.sh" 2>/dev/null
+elif command -v sed >/dev/null 2>&1; then
+    sed -i '' 's/\r$//' "$INSTALL_DIR/git-workflow.sh" 2>/dev/null || sed -i 's/\r$//' "$INSTALL_DIR/git-workflow.sh" 2>/dev/null
+elif command -v tr >/dev/null 2>&1; then
+    tr -d '\r' < "$INSTALL_DIR/git-workflow.sh" > "$INSTALL_DIR/git-workflow.sh.tmp"
+    mv "$INSTALL_DIR/git-workflow.sh.tmp" "$INSTALL_DIR/git-workflow.sh"
+fi
+
 # Make executable
 chmod +x "$INSTALL_DIR/git-workflow.sh"
 
@@ -64,6 +75,25 @@ fi
 echo -e "${BLUE}Testing installation...${NC}"
 if "$INSTALL_DIR/git-workflow.sh" --version >/dev/null 2>&1; then
     echo -e "${GREEN}✅ Installation successful!${NC}"
+elif echo 'exec: Failed to execute process' | grep -q "Windows line endings"; then
+    echo -e "${YELLOW}⚠️  Detected line ending issues, applying additional fixes...${NC}"
+    # Additional line ending fixes for stubborn cases
+    python3 -c "
+import sys
+with open('$INSTALL_DIR/git-workflow.sh', 'rb') as f:
+    content = f.read()
+content = content.replace(b'\r\n', b'\n').replace(b'\r', b'\n')
+with open('$INSTALL_DIR/git-workflow.sh', 'wb') as f:
+    f.write(content)
+" 2>/dev/null || true
+    chmod +x "$INSTALL_DIR/git-workflow.sh"
+    
+    # Test again
+    if "$INSTALL_DIR/git-workflow.sh" --version >/dev/null 2>&1; then
+        echo -e "${GREEN}✅ Installation successful after line ending fix!${NC}"
+    else
+        echo -e "${YELLOW}⚠️  Installation completed but script may have issues${NC}"
+    fi
 else
     echo -e "${YELLOW}⚠️  Installation completed but script may have issues${NC}"
 fi
