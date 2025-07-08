@@ -1,2 +1,1 @@
-# git-workflow-assistant
-AI-powered Git workflow automation tool with intelligent conflict resolution and natural language commands
+https://github.com/krishnaMohan2501/git-workflow-assistant
