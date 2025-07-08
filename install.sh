@@ -347,4 +347,112 @@ show_post_install() {
     echo ""
     
     if [ ! -d ".git" ]; then
-        echo -e "${YELLOW}
+        echo -e "${YELLOW}💡 Tip: Navigate to a Git repository to test the script!${NC}"
+    else
+        echo -e "${GREEN}🚀 You're in a Git repository - try running 'git-workflow.sh' now!${NC}"
+    fi
+}
+
+# Main installation flow
+main() {
+    echo -e "${BLUE}"
+    echo "╔══════════════════════════════════════════════════════════╗"
+    echo "║              Git Workflow Assistant Installer            ║"
+    echo "║                                                          ║"
+    echo "║  🚀 AI-powered Git workflow automation                   ║"
+    echo "║  🤖 Natural language git commands                        ║"
+    echo "║  🔄 Intelligent branch management                        ║"
+    echo "║  🛡️  Automatic conflict resolution                       ║"
+    echo "╚══════════════════════════════════════════════════════════╝"
+    echo -e "${NC}"
+    echo ""
+    
+    # Check if running as root
+    if [ "$EUID" -eq 0 ]; then
+        log_warning "Running as root is not recommended"
+        log_info "The script will be installed for the current user only"
+        read -p "Continue anyway? (y/N): " continue_root
+        if [[ ! $continue_root =~ ^[Yy]$ ]]; then
+            log_info "Installation cancelled"
+            exit 0
+        fi
+    fi
+    
+    # Run installation steps
+    check_requirements
+    choose_installation_method
+    test_installation
+    show_post_install
+    
+    echo -e "${GREEN}🎉 Happy Git workflow automation!${NC}"
+}
+
+# Handle command line arguments
+case "${1:-}" in
+    --help|-h)
+        echo "Git Workflow Assistant Installer"
+        echo ""
+        echo "Usage: $0 [OPTIONS]"
+        echo ""
+        echo "Options:"
+        echo "  --help, -h          Show this help"
+        echo "  --version, -v       Show version"
+        echo "  --uninstall         Uninstall the script"
+        echo "  --check-deps        Check dependencies only"
+        echo ""
+        echo "Examples:"
+        echo "  $0                  # Interactive installation"
+        echo "  $0 --check-deps     # Check system requirements"
+        echo "  $0 --uninstall      # Remove installation"
+        exit 0
+        ;;
+    --version|-v)
+        echo "Git Workflow Assistant Installer v1.0.0"
+        exit 0
+        ;;
+    --uninstall)
+        log_step "Uninstalling Git Workflow Assistant"
+        
+        # Remove main script
+        if [ -f "$INSTALL_DIR/$SCRIPT_NAME" ]; then
+            rm "$INSTALL_DIR/$SCRIPT_NAME"
+            log_success "Removed main script"
+        fi
+        
+        # Remove aliases
+        local aliases=("git-workflow" "gitflow" "gwf")
+        for alias in "${aliases[@]}"; do
+            if [ -f "$INSTALL_DIR/$alias" ]; then
+                rm "$INSTALL_DIR/$alias"
+                log_success "Removed alias: $alias"
+            fi
+        done
+        
+        # Remove cloned repository if exists
+        if [ -d "$LOCAL_INSTALL_DIR" ]; then
+            read -p "Remove cloned repository at $LOCAL_INSTALL_DIR? (y/N): " remove_repo
+            if [[ $remove_repo =~ ^[Yy]$ ]]; then
+                rm -rf "$LOCAL_INSTALL_DIR"
+                log_success "Removed repository"
+            fi
+        fi
+        
+        log_success "Git Workflow Assistant uninstalled"
+        log_info "You may need to remove PATH entries from your shell config manually"
+        exit 0
+        ;;
+    --check-deps)
+        check_requirements
+        log_success "Dependency check complete"
+        exit 0
+        ;;
+    "")
+        # No arguments - run main installation
+        main
+        ;;
+    *)
+        log_error "Unknown option: $1"
+        log_info "Run '$0 --help' for usage information"
+        exit 1
+        ;;
+esac
