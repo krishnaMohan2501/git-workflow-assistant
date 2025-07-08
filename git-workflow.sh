@@ -3,6 +3,20 @@
 # Intelligent Common Branch Workflow
 # Usage: ./git-workflow.sh <common-branch-name> [feature-branch-name]
 
+# Self-fix line endings if needed (one-time check)
+if [[ "$0" == *"git-workflow.sh"* ]] && [[ ! -f "/tmp/.git-workflow-fixed" ]]; then
+    if command -v file >/dev/null 2>&1 && file "$0" | grep -q "CRLF"; then
+        echo "🔧 Fixing line endings..."
+        if command -v sed >/dev/null 2>&1; then
+            sed -i '' 's/\r$//' "$0" 2>/dev/null || sed -i 's/\r$//' "$0" 2>/dev/null
+            chmod +x "$0"
+            touch "/tmp/.git-workflow-fixed"
+            echo "✅ Line endings fixed. Re-running script..."
+            exec "$0" "$@"
+        fi
+    fi
+fi
+
 # Configuration
 MASTER_BRANCH="master"
 
