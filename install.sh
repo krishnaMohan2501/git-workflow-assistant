@@ -14,7 +14,7 @@ CYAN='\033[0;36m'
 NC='\033[0m'
 
 # Configuration
-REPO_URL="https://github.com/yourusername/git-workflow-assistant"
+REPO_URL="https://github.com/krishnaMohan2501/git-workflow-assistant"
 SCRIPT_NAME="git-workflow.sh"
 INSTALL_DIR="$HOME/.local/bin"
 LOCAL_INSTALL_DIR="$HOME/git-workflow-assistant"
