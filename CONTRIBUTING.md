@@ -1,316 +1,298 @@
-# 🚀 Git Workflow Assistant
+# Contributing to Git Workflow Assistant
 
-An intelligent Git workflow automation script powered by AI that simplifies branch management, conflict resolution, and team collaboration.
+Thank you for your interest in contributing! This guide will help you get started.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Shell Script](https://img.shields.io/badge/Shell-Bash-green.svg)](https://www.gnu.org/software/bash/)
-[![GitHub Issues](https://img.shields.io/github/issues/yourusername/git-workflow-assistant)](https://github.com/yourusername/git-workflow-assistant/issues)
+## 🎯 Ways to Contribute
 
-## ✨ Features
+### 🐛 Bug Reports
+- Use clear, descriptive titles
+- Include steps to reproduce
+- Mention your OS and shell version
+- Provide error messages and logs
 
-### 🤖 **AI-Powered Git Assistant**
-- Natural language git commands via GitHub Copilot
-- Automatic placeholder resolution (`<branch-name>`, `<commit>`, etc.)
-- Smart error handling with contextual suggestions
-- Interactive command mode for learning and productivity
+### 💡 Feature Requests
+- Check existing issues first
+- Describe the problem you're solving
+- Explain the expected behavior
+- Consider implementation complexity
 
-### 🔄 **Automated Workflow Management**
-- Intelligent common branch creation and management
-- Automatic conflict resolution for version files (pom.xml, package.json)
-- Multi-step rebase handling with conflict auto-resolution
-- Cherry-pick integration for feature branches
+### 📝 Documentation
+- Fix typos and improve clarity
+- Add examples and use cases
+- Update installation instructions
+- Improve troubleshooting guides
 
-### 🛡️ **Safety & Intelligence**
-- Conflict detection and smart resolution strategies
-- Safety checks for destructive operations
-- Automatic PR creation with comprehensive descriptions
-- Fallback pattern matching when AI is unavailable
+### 🔧 Code Contributions
+- Follow existing code style
+- Add tests for new features
+- Update documentation
+- Use conventional commit messages
 
-## 🎯 Quick Start
+## 🚀 Development Setup
 
 ### Prerequisites
-
-- **Git** (obviously!)
-- **GitHub CLI** (`gh`) - for AI features and PR creation
-- **Python 3** - for smart conflict resolution
-- **Bash 4.0+** - for script execution
-
-### Installation
-
 ```bash
-# Clone the repository
+# Required tools
+git --version          # Git 2.20+
+bash --version         # Bash 4.0+
+gh --version           # GitHub CLI 2.0+
+python3 --version      # Python 3.6+
+```
+
+### Getting Started
+```bash
+# 1. Fork the repository on GitHub
+# 2. Clone your fork
 git clone https://github.com/yourusername/git-workflow-assistant.git
 cd git-workflow-assistant
 
-# Make the script executable
-chmod +x git-workflow.sh
+# 3. Create a feature branch
+git checkout -b feature/your-feature-name
 
-# Optional: Add to your PATH for global usage
-sudo ln -s $(pwd)/git-workflow.sh /usr/local/bin/git-workflow
-```
+# 4. Make your changes
+# ... edit files ...
 
-### Quick Usage
-
-```bash
-# Interactive menu
-./git-workflow.sh
-
-# Direct workflow mode
-./git-workflow.sh my-common-branch feature-auth
-
-# AI command mode  
-./git-workflow.sh git-mode
-```
-
-## 📖 Usage Guide
-
-### 🔧 **Workflow Mode**
-
-Perfect for team environments where multiple developers work on a common integration branch:
-
-```bash
-# Create and manage a common branch
-./git-workflow.sh dev-common
-
-# Integrate a feature branch into common branch
-./git-workflow.sh dev-common feature-login
-```
-
-**What it does:**
-1. ✅ Creates common branch from master (if needed)
-2. ✅ Adds empty commit and creates draft PR
-3. ✅ Integrates feature branch changes via rebase/cherry-pick
-4. ✅ Automatically resolves conflicts (especially version conflicts)
-5. ✅ Rebases onto master to maintain clean history
-6. ✅ Force pushes with lease protection
-
-### 🤖 **AI Command Mode**
-
-Transform natural language into git commands:
-
-```bash
-./git-workflow.sh ai
-```
-
-**Example commands:**
-- `"show me the last 5 commits"`
-- `"create a new branch called feature-auth"`
-- `"rebase current branch onto master"`
-- `"merge develop into current branch"`
-- `"undo the last commit but keep changes"`
-
-### 💡 **Interactive Menu**
-
-Just run the script without arguments:
-
-```bash
-./git-workflow.sh
-```
-
-Choose from:
-1. **Workflow Mode** - Automated branch management
-2. **AI Command Mode** - Natural language git assistant
-3. **Help** - Detailed documentation
-4. **Exit** - Quit the script
-
-## 🎨 Examples
-
-### Creating a New Common Branch
-
-```bash
-$ ./git-workflow.sh team-integration
-
-🚀 Starting Intelligent Common Branch Workflow
-==============================================
-Common branch: team-integration
-Master branch: master
-
-📋 STEP 1: Checking Common Branch 'team-integration'
-⚠️  WARNING: Common branch 'team-integration' does not exist
-Create common branch 'team-integration'? (Y/n): Y
-
-🔧 ACTION: Creating common branch 'team-integration'
-✅ Empty commit created successfully
-✅ Pull Request created successfully!
-🔗 PR URL: https://github.com/yourrepo/pull/123
-```
-
-### AI Command Examples
-
-```bash
-🤖 Git AI> show me what changed in the last commit
-🤖 AI Suggestion: git show --stat HEAD
-Execute this command? (Y/n/edit): Y
-🚀 EXECUTING: git show --stat HEAD
-✅ SUCCESS: Command executed successfully
-
-🤖 Git AI> rebase my branch onto master  
-🤖 AI Suggestion: git rebase origin/master
-Execute this command? (Y/n/edit): Y
-🚀 EXECUTING: git rebase origin/master
-✅ SUCCESS: Command executed successfully
-```
-
-### Automatic Conflict Resolution
-
-```bash
-📋 STEP 5: Syncing Common Branch with Master (Rebase)
-🤖 CONFLICTS DETECTED - Starting automatic multi-step resolution...
-
-🔄 Step 1: Resolving conflicts in rebase...
-Conflicted files in step 1:
-  pom.xml
-  package.json
-
-🔧 Auto-resolving: pom.xml
-Version conflict: 1.2.0 vs 1.3.0 -> chose 1.3.0
-✅ Auto-resolved: pom.xml
-
-🎉 ALL CONFLICTS RESOLVED AUTOMATICALLY!
-✅ SUCCESS: Rebase completed successfully
-```
-
-## 🛠️ Configuration
-
-### Environment Variables
-
-```bash
-# Set default master branch (default: "master")
-export GIT_WORKFLOW_MASTER_BRANCH="main"
-
-# Enable debug mode
-export GIT_WORKFLOW_DEBUG=1
-```
-
-### GitHub CLI Setup
-
-```bash
-# Authenticate with GitHub
-gh auth login
-
-# Verify installation
-gh --version
-```
-
-## 🤝 Contributing
-
-We welcome contributions! Here's how you can help:
-
-### 🐛 **Bug Reports**
-- Use the [issue tracker](https://github.com/yourusername/git-workflow-assistant/issues)
-- Include your OS, shell version, and exact error message
-- Provide steps to reproduce the issue
-
-### 💡 **Feature Requests**
-- Check existing issues first
-- Describe the use case and expected behavior
-- Consider submitting a PR if you can implement it!
-
-### 🔧 **Development Setup**
-
-```bash
-# Fork and clone your fork
-git clone https://github.com/yourusername/git-workflow-assistant.git
-cd git-workflow-assistant
-
-# Create a feature branch
-git checkout -b feature/amazing-new-feature
-
-# Make your changes and test thoroughly
+# 5. Test your changes
 ./git-workflow.sh --help
+./git-workflow.sh git-mode
 
-# Commit with conventional commits
-git commit -m "feat: add amazing new feature"
+# 6. Commit your changes
+git add .
+git commit -m "feat: add your feature description"
 
-# Push and create PR
-git push origin feature/amazing-new-feature
-gh pr create --title "feat: add amazing new feature"
+# 7. Push and create PR
+git push origin feature/your-feature-name
+gh pr create --title "feat: your feature description"
 ```
 
-### 📋 **Code Style**
-- Follow existing bash conventions
-- Add comments for complex logic
-- Include error handling for new features
-- Test on multiple platforms if possible
+## 📋 Code Style Guidelines
 
-## 🐛 Troubleshooting
-
-### Common Issues
-
-**Q: "Command not found: gh"**
+### Shell Script Conventions
 ```bash
-# Install GitHub CLI
-# macOS
-brew install gh
+# Use descriptive function names
+process_git_command() {
+    local user_input="$1"
+    # ...
+}
 
-# Ubuntu/Debian  
-curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
-sudo apt update && sudo apt install gh
+# Add error handling
+if ! command -v gh >/dev/null 2>&1; then
+    log_error "GitHub CLI not found"
+    return 1
+fi
+
+# Use consistent logging
+log_action "Performing operation..."
+log_success "Operation completed"
+log_warning "Something to note"
+log_error "Something went wrong"
+
+# Quote variables to prevent word splitting
+local branch_name="$1"
+git checkout "$branch_name"
 ```
 
-**Q: "Python not found" during conflict resolution**
+### Documentation Style
+- Use clear, concise language
+- Include code examples
+- Add emoji for visual appeal (sparingly)
+- Structure with headers and lists
+
+## 🧪 Testing
+
+### Manual Testing
 ```bash
-# Install Python 3
-# macOS
-brew install python3
+# Test different modes
+./git-workflow.sh                    # Menu mode
+./git-workflow.sh help               # Help mode
+./git-workflow.sh git-mode           # AI mode
+./git-workflow.sh test-branch        # Workflow mode
 
-# Ubuntu/Debian
-sudo apt install python3
+# Test error conditions
+./git-workflow.sh nonexistent-cmd   # Invalid command
+# Run in non-git directory           # Error handling
 ```
 
-**Q: Placeholder errors like `<branch-name>`**
-- The script should auto-resolve these
-- If not, try updating to the latest version
-- Report as a bug if it persists
+### Test Scenarios
+- [ ] Branch creation and PR generation
+- [ ] Conflict resolution (create test conflicts)
+- [ ] AI command processing
+- [ ] Error handling and recovery
+- [ ] Different Git configurations
 
-### Debug Mode
+## 📝 Commit Message Format
 
+We use [Conventional Commits](https://conventionalcommits.org/):
+
+```
+<type>[optional scope]: <description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+### Types
+- `feat`: New feature
+- `fix`: Bug fix
+- `docs`: Documentation changes
+- `style`: Code style changes (formatting, etc.)
+- `refactor`: Code refactoring
+- `test`: Adding or updating tests
+- `chore`: Maintenance tasks
+
+### Examples
 ```bash
-# Enable verbose logging
-export GIT_WORKFLOW_DEBUG=1
-./git-workflow.sh your-command
-
-# Check git status
-git status
-git log --oneline -5
+feat: add automatic conflict resolution for package.json
+fix: resolve placeholder detection in rebase commands
+docs: update installation instructions for Windows
+style: improve error message formatting
+refactor: extract conflict resolution into separate function
 ```
 
-## 📊 Compatibility
+## 🔍 Pull Request Process
 
-### Tested Environments
-- ✅ **macOS** (Big Sur, Monterey, Ventura)
-- ✅ **Ubuntu** 20.04, 22.04
-- ✅ **Debian** 11, 12
-- ✅ **CentOS/RHEL** 8, 9
-- ⚠️ **Windows** (via WSL or Git Bash)
+### Before Submitting
+- [ ] Test your changes thoroughly
+- [ ] Update documentation if needed
+- [ ] Add/update examples in README
+- [ ] Check for typos and formatting
+- [ ] Ensure backwards compatibility
 
-### Requirements
-- **Bash** 4.0+ (macOS users may need to upgrade)
-- **Git** 2.20+
-- **GitHub CLI** 2.0+
-- **Python** 3.6+ (for conflict resolution)
+### PR Description Template
+```markdown
+## 🎯 What does this PR do?
+Brief description of changes...
 
-## 📄 License
+## 🔧 Type of Change
+- [ ] Bug fix
+- [ ] New feature
+- [ ] Documentation update
+- [ ] Refactoring
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+## 🧪 Testing
+- [ ] Tested manually
+- [ ] Added new test cases
+- [ ] Existing tests pass
 
-## 🙏 Acknowledgments
+## 📸 Screenshots (if applicable)
+...
 
-- **GitHub Copilot** - For AI-powered git suggestions
-- **GitHub CLI team** - For the excellent `gh` tool
-- **Git community** - For the amazing version control system
-- **Contributors** - Everyone who helps improve this project
+## 📋 Checklist
+- [ ] Code follows project style guidelines
+- [ ] Self-review completed
+- [ ] Documentation updated
+- [ ] No breaking changes (or clearly documented)
+```
 
-## 📞 Support
+### Review Process
+1. **Automated checks** run first
+2. **Maintainer review** within 48-72 hours
+3. **Address feedback** if any
+4. **Merge** after approval
 
-- 📖 **Documentation**: Check this README and `--help` output
-- 🐛 **Bug Reports**: [GitHub Issues](https://github.com/yourusername/git-workflow-assistant/issues)
-- 💬 **Discussions**: [GitHub Discussions](https://github.com/yourusername/git-workflow-assistant/discussions)
-- 📧 **Email**: your.email@example.com
+## 🐛 Issue Reporting
+
+### Bug Report Template
+```markdown
+**Describe the bug**
+A clear description of what the bug is.
+
+**To Reproduce**
+Steps to reproduce:
+1. Run command '...'
+2. Select option '...'
+3. See error
+
+**Expected behavior**
+What you expected to happen.
+
+**Environment:**
+- OS: [e.g. macOS 13.0, Ubuntu 22.04]
+- Shell: [e.g. bash 5.1]
+- Git version: [e.g. 2.39.0]
+- GitHub CLI: [e.g. 2.20.0]
+
+**Additional context**
+Any other context about the problem.
+```
+
+### Feature Request Template
+```markdown
+**Is your feature request related to a problem?**
+A clear description of what the problem is.
+
+**Describe the solution you'd like**
+A clear description of what you want to happen.
+
+**Describe alternatives you've considered**
+Alternative solutions or features you've considered.
+
+**Additional context**
+Any other context or screenshots about the feature request.
+```
+
+## 🏷️ Release Process
+
+### Versioning
+We use [Semantic Versioning](https://semver.org/):
+- `MAJOR.MINOR.PATCH`
+- Major: Breaking changes
+- Minor: New features (backwards compatible)
+- Patch: Bug fixes
+
+### Release Checklist
+- [ ] Update version in script
+- [ ] Update CHANGELOG.md
+- [ ] Create git tag
+- [ ] Create GitHub release
+- [ ] Update documentation
+
+## 🤝 Community Guidelines
+
+### Be Respectful
+- Use inclusive language
+- Be patient with beginners
+- Provide constructive feedback
+- Assume good intentions
+
+### Be Helpful
+- Answer questions when possible
+- Share knowledge and experience
+- Help with code reviews
+- Improve documentation
+
+### Be Collaborative
+- Discuss ideas openly
+- Accept different approaches
+- Work together on solutions
+- Celebrate successes
+
+## 🙋 Getting Help
+
+### For Contributors
+- **Discord/Slack**: [Community chat link]
+- **Email**: maintainer@example.com
+- **Issues**: For bugs and feature requests
+- **Discussions**: For questions and ideas
+
+### For Users
+- **README**: Start here for usage info
+- **Issues**: Report bugs and request features
+- **Discussions**: Ask questions and share tips
+
+## 📚 Resources
+
+### Learning Git
+- [Pro Git Book](https://git-scm.com/book)
+- [Git Workflows](https://www.atlassian.com/git/tutorials/comparing-workflows)
+- [GitHub Flow](https://guides.github.com/introduction/flow/)
+
+### Shell Scripting
+- [Bash Guide](https://mywiki.wooledge.org/BashGuide)
+- [ShellCheck](https://shellcheck.net/) - Script analysis tool
+- [Google Shell Style Guide](https://google.github.io/styleguide/shellguide.html)
 
 ---
 
-⭐ **Star this repo** if it helps you! It motivates us to keep improving.
-
-🔧 **Made with ❤️ for developers who love clean Git workflows**
+Thank you for contributing! 🎉 Your help makes this project better for everyone.
