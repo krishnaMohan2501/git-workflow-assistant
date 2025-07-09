@@ -35,31 +35,29 @@ An intelligent Git workflow automation script powered by AI that simplifies bran
 - **Python 3** - for smart conflict resolution
 - **Bash 4.0+** - for script execution
 
-### Installation
+### **🚀 Quick Installation**
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/git-workflow-assistant.git
-cd git-workflow-assistant
-
-# Make the script executable
-chmod +x git-workflow.sh
-
-# Optional: Add to your PATH for global usage
-sudo ln -s $(pwd)/git-workflow.sh /usr/local/bin/git-workflow
+# One-line installation (recommended)
+curl -fsSL https://raw.githubusercontent.com/krishnaMohan2501/git-workflow-assistant/main/install.sh | bash
 ```
 
-### Quick Usage
+### **🧪 Quick Test**
 
 ```bash
-# Interactive menu
-./git-workflow.sh
+# Test the installation
+git-workflow.sh --version
 
-# Direct workflow mode
-./git-workflow.sh my-common-branch feature-auth
+# Try it in a Git repository
+cd your-git-repo
+git-workflow.sh
+```
 
-# AI command mode  
-./git-workflow.sh git-mode
+### **🗑️ Quick Uninstall**
+
+```bash
+# One-line uninstall
+curl -fsSL https://raw.githubusercontent.com/krishnaMohan2501/git-workflow-assistant/main/install.sh | bash -s -- --uninstall
 ```
 
 ## 📖 Usage Guide
@@ -176,7 +174,7 @@ Version conflict: 1.2.0 vs 1.3.0 -> chose 1.3.0
 
 ```bash
 # Set default master branch (default: "master")
-export GIT_WORKFLOW_MASTER_BRANCH="main"
+export GIT_WORKFLOW_MASTER_BRANCH="master"
 
 # Enable debug mode
 export GIT_WORKFLOW_DEBUG=1
@@ -249,14 +247,13 @@ echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githu
 sudo apt update && sudo apt install gh
 ```
 
-**Q: "Python not found" during conflict resolution**
+**Q: How do I uninstall the tool?**
 ```bash
-# Install Python 3
-# macOS
-brew install python3
+# One-line uninstall
+curl -fsSL https://raw.githubusercontent.com/krishnaMohan2501/git-workflow-assistant/main/install.sh | bash -s -- --uninstall
 
-# Ubuntu/Debian
-sudo apt install python3
+# Or manual removal
+rm -f ~/.local/bin/git-workflow* ~/.local/bin/gitflow ~/.local/bin/gwf
 ```
 
 **Q: Placeholder errors like `<branch-name>`**
