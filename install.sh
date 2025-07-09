@@ -265,6 +265,14 @@ fi
 choose_installation_method() {
     log_step "Choose Installation Method"
     
+    # Check if running in non-interactive mode (piped input)
+    if [ ! -t 0 ]; then
+        log_info "🤖 Non-interactive mode detected - using recommended method"
+        log_info "📥 Downloading latest release..."
+        install_from_release
+        return
+    fi
+    
     echo "How would you like to install Git Workflow Assistant?"
     echo ""
     echo "1) 🌐 Download latest release (recommended)"
@@ -272,15 +280,23 @@ choose_installation_method() {
     echo "3) 📋 Local installation from current directory"
     echo ""
     
-    read -p "Select method (1-3): " choice
+    # Use timeout to prevent hanging
+    if command_exists timeout; then
+        choice=$(timeout 30 bash -c 'read -p "Select method (1-3): " choice; echo $choice' 2>/dev/null || echo "1")
+    else
+        read -p "Select method (1-3): " choice
+    fi
+    
+    # Default to 1 if no input or timeout
+    choice=${choice:-1}
     
     case "$choice" in
         1) install_from_release ;;
         2) install_from_git ;;
         3) install_from_local ;;
         *) 
-            log_error "Invalid choice"
-            exit 1
+            log_warning "Invalid choice '$choice', using default (Download latest release)"
+            install_from_release
             ;;
     esac
 }
