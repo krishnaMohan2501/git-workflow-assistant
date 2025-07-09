@@ -1,9 +1,162 @@
 #!/bin/bash
 
-# Git Workflow Assistant - Installation Script
+# Git Workflow Assistant - Installation Script (FIXED)
 # This script downloads and installs the Git Workflow Assistant
+# FIX: Moved argument parsing to the beginning to handle --uninstall correctly
 
 set -euo pipefail
+
+# Handle command line arguments FIRST - before any other operations
+case "${1:-}" in
+    --help|-h)
+        echo "Git Workflow Assistant Installer"
+        echo ""
+        echo "Usage: $0 [OPTIONS]"
+        echo ""
+        echo "Options:"
+        echo "  --help, -h          Show this help"
+        echo "  --version, -v       Show version"
+        echo "  --uninstall         Uninstall the script"
+        echo "  --check-deps        Check dependencies only"
+        echo ""
+        echo "Examples:"
+        echo "  $0                  # Interactive installation"
+        echo "  $0 --check-deps     # Check system requirements"
+        echo "  $0 --uninstall      # Remove installation"
+        echo ""
+        echo "Remote usage:"
+        echo "  curl -fsSL https://raw.githubusercontent.com/krishnaMohan2501/git-workflow-assistant/main/install.sh | bash"
+        echo "  curl -fsSL https://raw.githubusercontent.com/krishnaMohan2501/git-workflow-assistant/main/install.sh | bash -s -- --uninstall"
+        exit 0
+        ;;
+    --version|-v)
+        echo "Git Workflow Assistant Installer v1.0.1"
+        exit 0
+        ;;
+    --uninstall)
+        # FIXED: Move uninstall logic to the beginning
+        echo -e "\033[0;34m🗑️  Uninstalling Git Workflow Assistant\033[0m"
+        echo "========================================"
+        
+        # Configuration (same as main script)
+        INSTALL_DIR="$HOME/.local/bin"
+        SCRIPT_NAME="git-workflow.sh"
+        
+        # Colors
+        RED='\033[0;31m'
+        GREEN='\033[0;32m'
+        YELLOW='\033[1;33m'
+        BLUE='\033[0;34m'
+        CYAN='\033[0;36m'
+        NC='\033[0m'
+        
+        uninstalled_count=0
+        
+        # Remove main script
+        if [ -f "$INSTALL_DIR/$SCRIPT_NAME" ]; then
+            rm "$INSTALL_DIR/$SCRIPT_NAME"
+            echo -e "${GREEN}✅ Removed main script: $INSTALL_DIR/$SCRIPT_NAME${NC}"
+            ((uninstalled_count++))
+        fi
+        
+        # Remove aliases
+        local aliases=("git-workflow" "gitflow" "gwf")
+        for alias in "${aliases[@]}"; do
+            if [ -f "$INSTALL_DIR/$alias" ]; then
+                rm "$INSTALL_DIR/$alias"
+                echo -e "${GREEN}✅ Removed alias: $alias${NC}"
+                ((uninstalled_count++))
+            fi
+        done
+        
+        # Remove cloned repository if exists
+        if [ -d "$HOME/git-workflow-assistant" ]; then
+            echo ""
+            echo -e "${YELLOW}Found cloned repository at $HOME/git-workflow-assistant${NC}"
+            read -p "Remove cloned repository? (y/N): " remove_repo
+            if [[ $remove_repo =~ ^[Yy]$ ]]; then
+                rm -rf "$HOME/git-workflow-assistant"
+                echo -e "${GREEN}✅ Removed repository: $HOME/git-workflow-assistant${NC}"
+                ((uninstalled_count++))
+            fi
+        fi
+        
+        # Clean up temporary files
+        rm -f /tmp/.git-workflow-fixed /tmp/git_cmd 2>/dev/null
+        
+        # Check for PATH entries in shell configs
+        echo ""
+        echo -e "${BLUE}🔍 Checking shell configurations...${NC}"
+        
+        local shell_configs=(
+            "$HOME/.bashrc"
+            "$HOME/.bash_profile" 
+            "$HOME/.zshrc"
+            "$HOME/.config/fish/config.fish"
+        )
+        
+        local found_path_entries=false
+        for config in "${shell_configs[@]}"; do
+            if [ -f "$config" ] && grep -q "$INSTALL_DIR" "$config" 2>/dev/null; then
+                echo -e "${YELLOW}⚠️  Found PATH entry in: $config${NC}"
+                echo "   You may want to manually remove lines containing: $INSTALL_DIR"
+                found_path_entries=true
+            fi
+        done
+        
+        # Verify uninstallation
+        echo ""
+        echo -e "${BLUE}🔍 Verifying uninstallation...${NC}"
+        
+        if command -v git-workflow.sh >/dev/null 2>&1; then
+            echo -e "${YELLOW}⚠️  git-workflow.sh still found in PATH${NC}"
+            echo "   Location: $(which git-workflow.sh)"
+            echo "   You may need to restart your terminal or remove it manually"
+        else
+            echo -e "${GREEN}✅ git-workflow.sh no longer in PATH${NC}"
+        fi
+        
+        # Summary
+        echo ""
+        echo -e "${CYAN}📊 Uninstallation Summary${NC}"
+        echo "========================"
+        if [ $uninstalled_count -eq 0 ]; then
+            echo -e "${YELLOW}⚠️  No Git Workflow Assistant files found to remove${NC}"
+            echo "   The tool may not have been installed or was already removed"
+        else
+            echo -e "${GREEN}✅ Successfully removed $uninstalled_count file(s)${NC}"
+        fi
+        
+        if [ "$found_path_entries" = true ]; then
+            echo -e "${YELLOW}⚠️  Manual cleanup required for shell configuration files${NC}"
+        fi
+        
+        echo ""
+        echo -e "${GREEN}🎉 Git Workflow Assistant uninstallation complete!${NC}"
+        echo ""
+        echo "To verify removal, restart your terminal and run:"
+        echo "  git-workflow.sh --version"
+        echo "This should return 'command not found'"
+        
+        exit 0
+        ;;
+    --check-deps)
+        echo -e "\033[0;34m🔍 Checking dependencies only...\033[0m"
+        # We'll define check_requirements function below and call it
+        ;;
+    "")
+        # No arguments - continue to main installation
+        ;;
+    *)
+        echo -e "\033[0;31m❌ Unknown option: $1\033[0m"
+        echo ""
+        echo "Run '$0 --help' for usage information"
+        echo ""
+        echo "Or use remote installation:"
+        echo "  curl -fsSL https://raw.githubusercontent.com/krishnaMohan2501/git-workflow-assistant/main/install.sh | bash"
+        exit 1
+        ;;
+esac
 
 # Colors for output
 RED='\033[0;31m'
@@ -100,6 +253,13 @@ check_requirements() {
         exit 1
     fi
 }
+
+# Handle --check-deps if it was the argument
+if [ "${1:-}" = "--check-deps" ]; then
+    check_requirements
+    echo -e "${GREEN}✅ Dependency check complete${NC}"
+    exit 0
+fi
 
 # Detect installation method preference
 choose_installation_method() {
@@ -426,144 +586,7 @@ main() {
     echo -e "${GREEN}🎉 Happy Git workflow automation!${NC}"
 }
 
-# Handle command line arguments
-case "${1:-}" in
-    --help|-h)
-        echo "Git Workflow Assistant Installer"
-        echo ""
-        echo "Usage: $0 [OPTIONS]"
-        echo ""
-        echo "Options:"
-        echo "  --help, -h          Show this help"
-        echo "  --version, -v       Show version"
-        echo "  --uninstall         Uninstall the script"
-        echo "  --check-deps        Check dependencies only"
-        echo ""
-        echo "Examples:"
-        echo "  $0                  # Interactive installation"
-        echo "  $0 --check-deps     # Check system requirements"
-        echo "  $0 --uninstall      # Remove installation"
-        echo ""
-        echo "Remote usage:"
-        echo "  curl -fsSL https://raw.githubusercontent.com/krishnaMohan2501/git-workflow-assistant/main/install.sh | bash"
-        echo "  curl -fsSL https://raw.githubusercontent.com/krishnaMohan2501/git-workflow-assistant/main/install.sh | bash -s -- --uninstall"
-        exit 0
-        ;;
-    --version|-v)
-        echo "Git Workflow Assistant Installer v1.0.0"
-        exit 0
-        ;;
-    --uninstall)
-        echo -e "${BLUE}🗑️  Uninstalling Git Workflow Assistant${NC}"
-        echo "========================================"
-        
-        local uninstalled_count=0
-        
-        # Remove main script
-        if [ -f "$INSTALL_DIR/git-workflow.sh" ]; then
-            rm "$INSTALL_DIR/git-workflow.sh"
-            echo -e "${GREEN}✅ Removed main script: $INSTALL_DIR/git-workflow.sh${NC}"
-            ((uninstalled_count++))
-        fi
-        
-        # Remove aliases
-        local aliases=("git-workflow" "gitflow" "gwf")
-        for alias in "${aliases[@]}"; do
-            if [ -f "$INSTALL_DIR/$alias" ]; then
-                rm "$INSTALL_DIR/$alias"
-                echo -e "${GREEN}✅ Removed alias: $alias${NC}"
-                ((uninstalled_count++))
-            fi
-        done
-        
-        # Remove cloned repository if exists
-        if [ -d "$HOME/git-workflow-assistant" ]; then
-            echo ""
-            echo -e "${YELLOW}Found cloned repository at $HOME/git-workflow-assistant${NC}"
-            read -p "Remove cloned repository? (y/N): " remove_repo
-            if [[ $remove_repo =~ ^[Yy]$ ]]; then
-                rm -rf "$HOME/git-workflow-assistant"
-                echo -e "${GREEN}✅ Removed repository: $HOME/git-workflow-assistant${NC}"
-                ((uninstalled_count++))
-            fi
-        fi
-        
-        # Clean up temporary files
-        rm -f /tmp/.git-workflow-fixed /tmp/git_cmd 2>/dev/null
-        
-        # Check for PATH entries in shell configs
-        echo ""
-        echo -e "${BLUE}🔍 Checking shell configurations...${NC}"
-        
-        local shell_configs=(
-            "$HOME/.bashrc"
-            "$HOME/.bash_profile" 
-            "$HOME/.zshrc"
-            "$HOME/.config/fish/config.fish"
-        )
-        
-        local found_path_entries=false
-        for config in "${shell_configs[@]}"; do
-            if [ -f "$config" ] && grep -q "$INSTALL_DIR" "$config" 2>/dev/null; then
-                echo -e "${YELLOW}⚠️  Found PATH entry in: $config${NC}"
-                echo "   You may want to manually remove lines containing: $INSTALL_DIR"
-                found_path_entries=true
-            fi
-        done
-        
-        # Verify uninstallation
-        echo ""
-        echo -e "${BLUE}🔍 Verifying uninstallation...${NC}"
-        
-        if command -v git-workflow.sh >/dev/null 2>&1; then
-            echo -e "${YELLOW}⚠️  git-workflow.sh still found in PATH${NC}"
-            echo "   Location: $(which git-workflow.sh)"
-            echo "   You may need to restart your terminal or remove it manually"
-        else
-            echo -e "${GREEN}✅ git-workflow.sh no longer in PATH${NC}"
-        fi
-        
-        # Summary
-        echo ""
-        echo -e "${CYAN}📊 Uninstallation Summary${NC}"
-        echo "========================"
-        if [ $uninstalled_count -eq 0 ]; then
-            echo -e "${YELLOW}⚠️  No Git Workflow Assistant files found to remove${NC}"
-            echo "   The tool may not have been installed or was already removed"
-        else
-            echo -e "${GREEN}✅ Successfully removed $uninstalled_count file(s)${NC}"
-        fi
-        
-        if [ "$found_path_entries" = true ]; then
-            echo -e "${YELLOW}⚠️  Manual cleanup required for shell configuration files${NC}"
-        fi
-        
-        echo ""
-        echo -e "${GREEN}🎉 Git Workflow Assistant uninstallation complete!${NC}"
-        echo ""
-        echo "To verify removal, restart your terminal and run:"
-        echo "  git-workflow.sh --version"
-        echo "This should return 'command not found'"
-        
-        exit 0
-        ;;
-    --check-deps)
-        echo -e "${BLUE}🔍 Checking dependencies only...${NC}"
-        check_requirements
-        echo -e "${GREEN}✅ Dependency check complete${NC}"
-        exit 0
-        ;;
-    "")
-        # No arguments - run main installation
-        main
-        ;;
-    *)
-        echo -e "${RED}❌ Unknown option: $1${NC}"
-        echo ""
-        echo "Run '$0 --help' for usage information"
-        echo ""
-        echo "Or use remote installation:"
-        echo "  curl -fsSL https://raw.githubusercontent.com/krishnaMohan2501/git-workflow-assistant/main/install.sh | bash"
-        exit 1
-        ;;
-esac
+# Only run main if no arguments were provided (handled at the top)
+if [ $# -eq 0 ]; then
+    main
+fi
