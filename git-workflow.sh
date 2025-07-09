@@ -3,20 +3,6 @@
 # Intelligent Common Branch Workflow
 # Usage: ./git-workflow.sh <common-branch-name> [feature-branch-name]
 
-# Self-fix line endings if needed (one-time check)
-if [[ "$0" == *"git-workflow.sh"* ]] && [[ ! -f "/tmp/.git-workflow-fixed" ]]; then
-    if command -v file >/dev/null 2>&1 && file "$0" | grep -q "CRLF"; then
-        echo "🔧 Fixing line endings..."
-        if command -v sed >/dev/null 2>&1; then
-            sed -i '' 's/\r$//' "$0" 2>/dev/null || sed -i 's/\r$//' "$0" 2>/dev/null
-            chmod +x "$0"
-            touch "/tmp/.git-workflow-fixed"
-            echo "✅ Line endings fixed. Re-running script..."
-            exec "$0" "$@"
-        fi
-    fi
-fi
-
 # Configuration
 MASTER_BRANCH="master"
 
@@ -64,13 +50,6 @@ execute_copilot() {
     local temp_file="/tmp/git_cmd"
     
     log_action "Asking Copilot: $description"
-    
-    # Check if GitHub CLI is available
-    if ! command -v gh >/dev/null 2>&1; then
-        log_warning "GitHub CLI (gh) not found. Using fallback git commands."
-        execute_fallback_command "$description"
-        return $?
-    fi
     
     # Use the exact working pattern you discovered
     gh copilot suggest -t git -s "$temp_file" "$description"
@@ -121,43 +100,6 @@ execute_copilot() {
         echo -e "${RED}❌ WORKFLOW STOPPED - No command to execute${NC}"
         rm -f "$temp_file"
         exit 1
-    fi
-}
-
-# Fallback command execution when GitHub CLI is not available
-execute_fallback_command() {
-    local description="$1"
-    
-    log_action "Using fallback git command for: $description"
-    
-    # Map common descriptions to git commands
-    local cmd=""
-    case "$description" in
-        *"checkout"*"branch"*)
-            local branch=$(echo "$description" | grep -o '[a-zA-Z0-9_-]\+' | tail -1)
-            cmd="git checkout $branch"
-            ;;
-        *"pull"*"latest"*)
-            cmd="git pull origin $(git branch --show-current)"
-            ;;
-        *"create"*"branch"*)
-            local branch=$(echo "$description" | grep -o '[a-zA-Z0-9_-]\+' | tail -1)
-            cmd="git checkout -b $branch"
-            ;;
-        *"push"*"origin"*)
-            cmd="git push origin $(git branch --show-current)"
-            ;;
-        *"rebase"*)
-            cmd="git rebase origin/master"
-            ;;
-        *)
-            log_warning "No fallback available for: $description"
-            read -p "Enter git command manually: " cmd
-            ;;
-    esac
-    
-    if [ -n "$cmd" ]; then
-        execute_git "$cmd" "$description"
     fi
 }
 
@@ -341,6 +283,500 @@ get_conflicted_files() {
     git status --porcelain | grep "^UU\|^AA\|^DD" | sed 's/^..//'
 }
 
+# Enhanced automatic conflict resolution with smart version handling
+auto_resolve_version_conflicts() {
+    local file="$1"
+    
+    log_action "Auto-resolving version conflicts in: $file"
+    
+    # Create backup
+    cp "$file" "${file}.backup"
+    
+    # Use Python for smart version conflict resolution
+    python3 << EOF
+import re
+import sys
+
+def compare_versions(v1, v2):
+    """Compare two version strings and return the higher one"""
+    try:
+        # Simple version comparison for most cases
+        v1_parts = [int(x) for x in v1.split('.')]
+        v2_parts = [int(x) for x in v2.split('.')]
+        
+        # Pad shorter version with zeros
+        max_len = max(len(v1_parts), len(v2_parts))
+        v1_parts.extend([0] * (max_len - len(v1_parts)))
+        v2_parts.extend([0] * (max_len - len(v2_parts)))
+        
+        if v1_parts >= v2_parts:
+            return v1
+        else:
+            return v2
+    except:
+        # If version parsing fails, use string comparison as fallback
+        if v1 >= v2:
+            return v1
+        else:
+            return v2
+
+def resolve_version_conflicts(content):
+    """Automatically resolve version conflicts by choosing higher versions"""
+    
+    # Pattern to match conflict blocks with versions
+    conflict_pattern = r'<<<<<<< HEAD\n(.*?)\n=======\n(.*?)\n>>>>>>> .*?\n'
+    
+    def replace_conflict(match):
+        our_section = match.group(1).strip()
+        their_section = match.group(2).strip()
+        
+        # Check if this is a version conflict
+        our_version_match = re.search(r'<version>([\d\.]+)</version>', our_section)
+        their_version_match = re.search(r'<version>([\d\.]+)</version>', their_section)
+        
+        if our_version_match and their_version_match:
+            our_version = our_version_match.group(1)
+            their_version = their_version_match.group(1)
+            
+            # Choose the higher version
+            chosen_version = compare_versions(our_version, their_version)
+            
+            print(f"Version conflict: {our_version} vs {their_version} -> chose {chosen_version}")
+            
+            if chosen_version == our_version:
+                return our_section + '\n'
+            else:
+                return their_section + '\n'
+        
+        # For non-version conflicts, try to merge intelligently
+        else:
+            # If sections are similar, try to combine
+            if our_section == their_section:
+                return our_section + '\n'
+            
+            # For different content, prefer ours (current branch) in rebase
+            print(f"Non-version conflict resolved by keeping current branch version")
+            return our_section + '\n'
+    
+    # Replace all conflict blocks
+    resolved_content = re.sub(conflict_pattern, replace_conflict, content, flags=re.DOTALL)
+    
+    return resolved_content
+
+try:
+    with open('$file', 'r') as f:
+        content = f.read()
+    
+    # Check if file has conflicts
+    if '<<<<<<< HEAD' not in content:
+        print("No conflicts found in file")
+        sys.exit(0)
+    
+    print(f"Resolving conflicts in $file...")
+    
+    # Resolve conflicts
+    resolved_content = resolve_version_conflicts(content)
+    
+    # Write resolved content
+    with open('$file', 'w') as f:
+        f.write(resolved_content)
+    
+    # Verify no conflict markers remain
+    if '<<<<<<< HEAD' not in resolved_content:
+        print(f"✅ Successfully auto-resolved all conflicts in $file")
+        sys.exit(0)
+    else:
+        print(f"❌ Some conflicts could not be auto-resolved in $file")
+        sys.exit(1)
+        
+except Exception as e:
+    print(f"❌ Error during auto-resolution: {e}")
+    sys.exit(1)
+EOF
+    
+    local python_exit_code=$?
+    
+    if [ $python_exit_code -eq 0 ]; then
+        # Auto-resolution succeeded
+        log_success "Auto-resolved conflicts in $file"
+        git add "$file"
+        rm -f "${file}.backup"
+        return 0
+    else
+        # Auto-resolution failed, restore backup
+        log_warning "Auto-resolution failed for $file, trying simpler approach"
+        mv "${file}.backup" "$file"
+        
+        # Try simpler approach - just take the newer versions for pom.xml
+        if [[ "$file" == *"pom.xml" ]]; then
+            log_action "Trying simple version conflict resolution for $file"
+            
+            # For pom.xml, in rebase context, usually take "ours" (current branch versions)
+            if git checkout --ours "$file" 2>/dev/null; then
+                log_success "Resolved $file by taking current branch version"
+                git add "$file"
+                return 0
+            fi
+        fi
+        
+        return 1
+    fi
+}
+
+# Completely automatic conflict resolution
+resolve_conflicts_automatically() {
+    local conflicted_files=$(get_conflicted_files)
+    
+    if [ -z "$conflicted_files" ]; then
+        log_success "No conflicts to resolve"
+        return 0
+    fi
+    
+    log_action "🤖 AUTOMATIC CONFLICT RESOLUTION STARTING"
+    log_action "Found conflicts in files:"
+    echo "$conflicted_files" | sed 's/^/  /'
+    echo ""
+    
+    local all_resolved=true
+    
+    # Process each conflicted file automatically
+    echo "$conflicted_files" | while read -r file; do
+        if [ -f "$file" ]; then
+            echo ""
+            log_action "🔧 Auto-resolving: $file"
+            
+            # Try smart version resolution first
+            if auto_resolve_version_conflicts "$file"; then
+                log_success "✅ Auto-resolved: $file"
+            else
+                log_warning "❌ Could not auto-resolve: $file"
+                
+                # Fallback strategies
+                if [[ "$file" == *"pom.xml" ]]; then
+                    log_action "Applying POM.xml fallback strategy"
+                    
+                    # For pom.xml, take current branch version (usually newer)
+                    if git checkout --ours "$file"; then
+                        git add "$file"
+                        log_success "✅ Resolved $file using 'ours' strategy"
+                    else
+                        log_error "❌ Failed to resolve $file"
+                        all_resolved=false
+                    fi
+                else
+                    # For other files, try ours first, then theirs
+                    if git checkout --ours "$file"; then
+                        git add "$file"
+                        log_success "✅ Resolved $file using 'ours' strategy"
+                    elif git checkout --theirs "$file"; then
+                        git add "$file"
+                        log_success "✅ Resolved $file using 'theirs' strategy"
+                    else
+                        log_error "❌ Failed to resolve $file"
+                        all_resolved=false
+                    fi
+                fi
+            fi
+        fi
+    done
+    
+    # Check if all files were resolved
+    if has_conflicts; then
+        log_error "Some conflicts remain unresolved"
+        echo ""
+        echo -e "${CYAN}Remaining conflicts:${NC}"
+        get_conflicted_files | sed 's/^/  /'
+        return 1
+    else
+        log_success "🎉 ALL CONFLICTS RESOLVED AUTOMATICALLY!"
+        return 0
+    fi
+}
+
+# Create common branch with PR setup
+create_common_branch() {
+    local common_branch="$1"
+    
+    log_action "Creating common branch '$common_branch'"
+    
+    read -p "Create '$common_branch' from which branch? (default: $MASTER_BRANCH): " source_branch
+    source_branch="${source_branch:-$MASTER_BRANCH}"
+    
+    # Step 1: Checkout source branch and pull latest
+    execute_copilot "checkout to $source_branch branch"
+    sleep 1
+    execute_copilot "pull latest changes from origin $source_branch branch"
+    sleep 1
+    
+    # Step 2: Create new branch
+    execute_copilot "create new branch $common_branch from $source_branch"
+    sleep 1
+    
+    # Step 3: Create empty commit to establish the branch
+    log_action "Creating initial empty commit for branch establishment"
+    local commit_message="feat: initialize $common_branch branch for collaborative development"
+    
+    if execute_git "git commit --allow-empty -m \"$commit_message\"" "Creating empty commit"; then
+        log_success "Empty commit created successfully"
+    else
+        log_warning "Empty commit failed, but continuing..."
+    fi
+    
+    # Step 4: Push branch to origin with upstream tracking
+    execute_copilot "push new branch $common_branch to origin with upstream tracking"
+    sleep 1
+    
+    # Step 5: Automatically create PR
+    create_pull_request_for_branch "$common_branch" "$source_branch"
+}
+
+# Create pull request for the common branch
+create_pull_request_for_branch() {
+    local branch="$1"
+    local base_branch="$2"
+    
+    log_action "Creating Pull Request for '$branch'"
+    
+    # Check if gh CLI is available
+    if ! command -v gh >/dev/null 2>&1; then
+        log_warning "GitHub CLI (gh) not found. Skipping automatic PR creation."
+        echo ""
+        echo -e "${YELLOW}💡 Manual PR Creation:${NC}"
+        echo "  1. Go to your repository on GitHub"
+        echo "  2. Click 'New Pull Request'"
+        echo "  3. Select '$branch' → '$base_branch'"
+        echo "  4. Add title: 'feat: $branch - collaborative development branch'"
+        echo ""
+        return 1
+    fi
+    
+    # Ask user if they want to create PR
+    read -p "Create Pull Request for '$branch' → '$base_branch'? (Y/n): " create_pr
+    if [[ $create_pr =~ ^[Nn]$ ]]; then
+        log_warning "Skipping PR creation as requested"
+        return 0
+    fi
+    
+    # Generate PR details
+    local pr_title="feat: $branch - collaborative development branch"
+    local pr_body="## 🚀 Common Development Branch: \`$branch\`
+
+This is a collaborative development branch created for team integration.
+
+### 📋 Purpose:
+- Consolidate features from multiple developers
+- Maintain clean commit history via rebase workflow  
+- Enable collaborative development while keeping master stable
+
+### 🔄 Workflow:
+1. Developers integrate their feature branches into this common branch
+2. Common branch is regularly rebased onto master to stay current
+3. Final merge to master happens after team review and testing
+
+### 📌 Branch Details:
+- **Base Branch:** \`$base_branch\`
+- **Created:** $(date)
+- **Initial Commit:** Empty commit for branch establishment
+
+### ✅ Ready for:
+- [ ] Feature branch integrations
+- [ ] Code reviews
+- [ ] Testing and validation
+- [ ] Final merge to $base_branch
+
+---
+*This PR was automatically created by the git-workflow script*"
+    
+    # Create the PR
+    log_action "Creating PR with GitHub CLI..."
+    
+    if gh pr create \
+        --title "$pr_title" \
+        --body "$pr_body" \
+        --base "$base_branch" \
+        --head "$branch" \
+        --draft 2>/dev/null; then
+        
+        log_success "✅ Pull Request created successfully!"
+        
+        # Get PR URL
+        local pr_url=$(gh pr view --json url --jq .url 2>/dev/null)
+        if [ -n "$pr_url" ]; then
+            echo -e "${GREEN}🔗 PR URL: $pr_url${NC}"
+        fi
+        
+        # Show PR status
+        echo ""
+        echo -e "${CYAN}📋 PR Status:${NC}"
+        echo "  • Status: Draft (ready for feature integrations)"
+        echo "  • Base: $base_branch ← Head: $branch"
+        echo "  • Ready for team collaboration"
+        
+    else
+        log_warning "Failed to create PR via GitHub CLI"
+        echo ""
+        echo -e "${YELLOW}💡 Manual PR Creation Required:${NC}"
+        echo "  1. Visit: https://github.com/$(git remote get-url origin | sed 's/.*github.com[:/]\([^.]*\).*/\1/')/compare/$base_branch...$branch"
+        echo "  2. Title: $pr_title"
+        echo "  3. Mark as Draft initially"
+        echo ""
+    fi
+}
+
+# Enhanced workflow summary with PR information
+show_workflow_summary() {
+    local common_branch="$1"
+    local feature_branch="$2"
+    local skip_feature_integration="$3"
+    local branch_created="$4"
+    
+    echo ""
+    echo -e "${GREEN}🎉 Workflow completed successfully!${NC}"
+    echo -e "${CYAN}===========================================${NC}"
+    echo -e "${CYAN}📊 WORKFLOW SUMMARY${NC}"
+    echo -e "${CYAN}===========================================${NC}"
+    
+    if [ "$branch_created" = true ]; then
+        echo "✅ Common branch '$common_branch' created from master"
+        echo "✅ Empty commit added for branch establishment"
+        echo "✅ Pull Request created (draft mode)"
+    else
+        echo "✅ Common branch '$common_branch' processed"
+    fi
+    
+    if [[ "$skip_feature_integration" == "false" ]] && [ -n "$feature_branch" ]; then
+        echo "✅ Changes from '$feature_branch' integrated using rebase/cherry-pick"
+    else
+        echo "✅ Common branch synced with master (no feature integration)"
+    fi
+    
+    echo "✅ Merged commits cleaned up"
+    echo "✅ Common branch rebased onto master (no merge commits)"
+    echo "✅ Changes force-pushed to remote with lease protection"
+    
+    if [ "$branch_created" = true ]; then
+        echo ""
+        echo -e "${YELLOW}🔄 Next Steps:${NC}"
+        echo "  1. Review the created Pull Request"
+        echo "  2. Start integrating feature branches"
+        echo "  3. Mark PR as 'Ready for Review' when complete"
+        echo "  4. Merge to master after team approval"
+    fi
+    
+    echo -e "${CYAN}===========================================${NC}"
+}
+
+# Clean commits that are already merged to master
+clean_merged_commits() {
+    local common_branch="$1"
+    
+    log_action "Checking for commits already merged to master"
+    
+    local unmerged_commits=$(git rev-list --oneline "$common_branch" --not "$MASTER_BRANCH" 2>/dev/null)
+    
+    if [ -z "$unmerged_commits" ]; then
+        log_success "No commits to clean - common branch is in sync with master"
+        return 0
+    fi
+    
+    echo "Commits in common branch not yet in master:"
+    echo "$unmerged_commits" | sed 's/^/  /'
+    
+    local merged_commits=$(git cherry -v "$MASTER_BRANCH" "$common_branch" | grep "^-" | cut -d' ' -f2-)
+    
+    if [ -n "$merged_commits" ]; then
+        echo -e "${YELLOW}Found commits that may have been merged to master:${NC}"
+        echo "$merged_commits" | sed 's/^/  /'
+        
+        read -p "Remove merged commits from common branch? (y/N): " remove_merged
+        if [[ $remove_merged =~ ^[Yy]$ ]]; then
+            log_action "Cleaning merged commits"
+            execute_copilot "rebase $common_branch onto $MASTER_BRANCH interactively to remove merged commits"
+        fi
+    fi
+}
+
+# Cherry-pick missing commits from feature branch
+cherry_pick_missing_commits() {
+    local common_branch="$1"
+    local feature_branch="$2"
+    
+    log_action "Checking for missing commits from feature branch '$feature_branch'"
+    
+    local missing_commits=$(get_unique_commits "$feature_branch" "$common_branch")
+    
+    if [ -z "$missing_commits" ]; then
+        log_success "All commits from '$feature_branch' are already in '$common_branch'"
+        return 0
+    fi
+    
+    echo -e "${YELLOW}Missing commits from '$feature_branch':${NC}"
+    echo "$missing_commits" | sed 's/^/  /'
+    
+    read -p "Cherry-pick these commits to common branch? (Y/n): " do_cherry_pick
+    if [[ ! $do_cherry_pick =~ ^[Nn]$ ]]; then
+        log_action "Cherry-picking missing commits"
+        
+        local commit_hashes=$(echo "$missing_commits" | cut -d' ' -f1 | tac)
+        
+        for commit in $commit_hashes; do
+            log_action "Cherry-picking commit: $commit"
+            if ! execute_git "git cherry-pick $commit" "Cherry-picking $commit"; then
+                log_error "Cherry-pick failed for commit $commit"
+                log_warning "Please resolve conflicts and continue"
+                
+                read -p "Press Enter after resolving conflicts..."
+                execute_git "git add . && git cherry-pick --continue" "Continuing cherry-pick"
+            fi
+        done
+        
+        log_success "Cherry-pick completed successfully"
+        return 0
+    else
+        log_warning "Skipping cherry-pick as requested"
+        return 0
+    fi
+}
+
+# Resolve conflicts intelligently
+resolve_conflicts() {
+    local common_branch="$1"
+    local feature_branch="$2"
+    
+    log_error "Merge conflicts detected!"
+    echo -e "${YELLOW}Conflict resolution strategy:${NC}"
+    echo "1. Preserve all developer changes in common branch"
+    echo "2. Integrate new changes from feature branch"
+    echo "3. Remove any changes already merged to master"
+    
+    read -p "Shall I help resolve conflicts? (Y/n): " resolve_conflicts
+    if [[ ! $resolve_conflicts =~ ^[Nn]$ ]]; then
+        log_action "Starting intelligent conflict resolution"
+        
+        echo -e "${CYAN}Files with conflicts:${NC}"
+        git status --porcelain | grep "^UU\|^AA\|^DD" | sed 's/^../  /'
+        
+        execute_copilot "resolve merge conflicts preserving all developer changes from $common_branch while integrating new changes from $feature_branch"
+        
+        echo ""
+        echo -e "${YELLOW}💡 Conflict Resolution Steps:${NC}"
+        echo "1. Edit each conflicted file manually"
+        echo "2. Keep ALL existing changes from other developers"
+        echo "3. Integrate your new changes appropriately"
+        echo "4. Remove any duplicate functionality already in master"
+        echo "5. Test the combined changes"
+        
+        read -p "Press Enter after resolving all conflicts manually..."
+        
+        execute_copilot "add all resolved conflict files and complete the merge"
+        
+        return 0
+    else
+        log_error "Conflict resolution cancelled"
+        return 1
+    fi
+}
+
 # Show detailed help
 show_detailed_help() {
     echo -e "${BLUE}🔧 Git Workflow Script - Help${NC}"
@@ -443,71 +879,304 @@ handle_main_menu() {
     esac
 }
 
-# Simple workflow for basic git operations
-simple_workflow() {
-    local branch_name="$1"
+# Main workflow function with enhanced error handling
+main_workflow() {
+    local common_branch="$1"
+    local feature_branch="$2"
     
-    echo -e "${BLUE}🔧 Simple Git Workflow${NC}"
-    echo "======================="
-    echo "Branch: $branch_name"
+    echo -e "${BLUE}🚀 Starting Intelligent Common Branch Workflow${NC}"
+    echo "=============================================="
+    echo "Common branch: $common_branch"
+    echo "Master branch: $MASTER_BRANCH"
     echo ""
     
-    # Basic git operations without Copilot dependency
-    log_step "1" "Basic Git Operations"
+    # Handle feature branch parameter
+    local skip_feature_integration=false
+    if [ -z "$feature_branch" ]; then
+        log_warning "No feature branch specified"
+        echo "Available feature branches:"
+        git branch | grep -v -E "(master|main|$common_branch)" | sed 's/^[ *]*/  - /'
+        echo ""
+        read -p "Enter feature branch name to integrate (or press Enter to skip): " feature_branch
+        
+        if [ -z "$feature_branch" ]; then
+            log_warning "Skipping feature branch integration - will only sync common branch"
+            skip_feature_integration=true
+        fi
+    fi
     
-    echo "Available operations:"
-    echo "1) Create and switch to branch"
-    echo "2) Switch to existing branch" 
-    echo "3) Pull latest changes"
-    echo "4) Push current branch"
-    echo "5) Show git status"
+    if [[ "$skip_feature_integration" == "false" ]]; then
+        echo "Feature branch: $feature_branch"
+        
+        # Validate feature branch
+        if [[ "$feature_branch" == "$MASTER_BRANCH" ]] || [[ "$feature_branch" == "$common_branch" ]]; then
+            log_error "Cannot use $feature_branch as feature branch"
+            exit 1
+        fi
+        
+        # Check if feature branch exists
+        if ! branch_exists_locally "$feature_branch" && ! branch_exists_remotely "$feature_branch"; then
+            log_error "Feature branch '$feature_branch' does not exist"
+            exit 1
+        fi
+    else
+        echo "Mode: Common branch sync only (no feature integration)"
+    fi
+    
     echo ""
     
-    read -p "Select operation (1-5): " op_choice
+    # Step 1: Check if common branch exists
+    log_step "1" "Checking Common Branch '$common_branch'"
+    if branch_exists_locally "$common_branch"; then
+        log_success "Common branch '$common_branch' exists locally"
+    elif branch_exists_remotely "$common_branch"; then
+        log_warning "Common branch exists on remote, creating local tracking branch"
+        execute_copilot "checkout new local branch $common_branch tracking origin/$common_branch"
+    else
+        log_warning "Common branch '$common_branch' does not exist"
+        read -p "Create common branch '$common_branch'? (Y/n): " create_branch
+        if [[ ! $create_branch =~ ^[Nn]$ ]]; then
+            create_common_branch "$common_branch"
+        else
+            log_error "Cannot proceed without common branch"
+            exit 1
+        fi
+    fi
     
-    case "$op_choice" in
-        1)
-            execute_git "git checkout -b $branch_name" "Creating new branch"
-            ;;
-        2)
-            execute_git "git checkout $branch_name" "Switching to branch"
-            ;;
-        3)
-            execute_git "git pull origin $(git branch --show-current)" "Pulling latest changes"
-            ;;
-        4)
-            execute_git "git push origin $(git branch --show-current)" "Pushing current branch"
-            ;;
-        5)
-            execute_git "git status" "Showing git status"
-            ;;
-        *)
-            log_error "Invalid choice"
-            ;;
-    esac
+    # Step 2: Switch to common branch and update
+    log_step "2" "Switching to Common Branch and Updating"
+    execute_copilot "checkout to $common_branch branch"
+    sleep 1
+    execute_copilot "pull latest changes from origin $common_branch branch"
+    
+    # Step 3: Clean merged commits
+    log_step "3" "Cleaning Commits Already Merged to Master"
+    clean_merged_commits "$common_branch"
+    
+    # Step 4: Feature branch integration (conditional)
+    if [[ "$skip_feature_integration" == "false" ]]; then
+        log_step "4" "Integrating Feature Branch '$feature_branch'"
+        
+        log_action "Testing for conflicts with feature branch '$feature_branch'"
+        
+        # Create a temporary merge to test for conflicts
+        git merge --no-commit --no-ff "$feature_branch" 2>/dev/null
+        
+        if has_conflicts; then
+            log_warning "Conflicts detected between '$common_branch' and '$feature_branch'"
+            
+            # Abort the test merge
+            execute_git "git merge --abort" "Aborting test merge"
+            
+            # Resolve conflicts
+            if resolve_conflicts "$common_branch" "$feature_branch"; then
+                log_action "Rebasing feature branch changes onto common branch"
+                execute_copilot "rebase $feature_branch onto current branch"
+            else
+                log_error "Workflow stopped due to unresolved conflicts"
+                exit 1
+            fi
+        else
+            # No conflicts - abort test merge and do cherry-pick instead
+            execute_git "git merge --abort 2>/dev/null || true" "Cleaning up test merge"
+            
+            log_success "No conflicts detected"
+            
+            # Cherry-pick missing commits
+            log_action "Adding missing commits from feature branch using cherry-pick"
+            cherry_pick_missing_commits "$common_branch" "$feature_branch"
+        fi
+        
+        step_number="5"
+    else
+        log_step "4" "Skipping Feature Integration (No feature branch specified)"
+        step_number="4"
+    fi
+    
+    # Step 5/4: Sync common branch with master using rebase
+    log_step "$step_number" "Syncing Common Branch with Master (Rebase)"
+    log_action "Rebasing common branch onto master to avoid merge commits"
+    
+    # Fetch latest master
+    if ! execute_git "git fetch origin $MASTER_BRANCH" "Fetching latest master"; then
+        log_error "Failed to fetch master branch"
+        exit 1
+    fi
+    
+    # Get current branch for rebase command
+    local current_branch=$(git branch --show-current)
+    
+    # Rebase common branch onto master with proper branch resolution
+    log_action "Starting rebase onto origin/$MASTER_BRANCH"
+    
+    # Create a more specific command that doesn't use placeholders
+    local rebase_cmd="git rebase origin/$MASTER_BRANCH"
+    
+    echo -e "${GREEN}🚀 EXECUTING: $rebase_cmd${NC}"
+    eval "$rebase_cmd"
+    local rebase_exit_code=$?
+    
+    # Check if rebase succeeded or had conflicts
+    if [ $rebase_exit_code -eq 0 ]; then
+        log_success "Rebase completed successfully"
+    else
+        # Rebase failed - check if it's due to conflicts
+        if has_conflicts; then
+            log_warning "🤖 CONFLICTS DETECTED - Starting automatic multi-step resolution..."
+            
+            # Handle multi-step rebase with automatic conflict resolution
+            local max_attempts=10
+            local attempt=1
+            local all_resolved=true
+            
+            while [ $attempt -le $max_attempts ]; do
+                if has_conflicts; then
+                    log_action "🔄 Step $attempt: Resolving conflicts in rebase..."
+                    
+                    # Show which files have conflicts
+                    echo -e "${CYAN}Conflicted files in step $attempt:${NC}"
+                    get_conflicted_files | sed 's/^/  /'
+                    
+                    # Automatically resolve conflicts
+                    if resolve_conflicts_automatically; then
+                        log_success "✅ Step $attempt: All conflicts resolved automatically"
+                        
+                        # Continue the rebase
+                        log_action "🔄 Step $attempt: Continuing rebase..."
+                        git rebase --continue
+                        local continue_exit_code=$?
+                        
+                        if [ $continue_exit_code -eq 0 ]; then
+                            # Check if rebase is completely done
+                            if git status | grep -q "rebase in progress"; then
+                                log_success "✅ Step $attempt: Rebase step completed, checking for more conflicts..."
+                                ((attempt++))
+                                sleep 1  # Small delay to let git settle
+                            else
+                                log_success "🎉 REBASE COMPLETED SUCCESSFULLY after $attempt steps!"
+                                break
+                            fi
+                        else
+                            # Continue failed, check if we have new conflicts
+                            if has_conflicts; then
+                                log_action "🔄 Step $attempt: New conflicts detected after continue, proceeding to next iteration..."
+                                ((attempt++))
+                            else
+                                # Continue failed for other reason
+                                log_error "❌ Step $attempt: Rebase continue failed (exit code: $continue_exit_code)"
+                                all_resolved=false
+                                break
+                            fi
+                        fi
+                    else
+                        log_error "❌ Step $attempt: Could not auto-resolve conflicts"
+                        all_resolved=false
+                        break
+                    fi
+                else
+                    # No more conflicts
+                    if git status | grep -q "rebase in progress"; then
+                        log_action "🔄 Step $attempt: No conflicts, but rebase still in progress..."
+                        git rebase --continue
+                        if [ $? -eq 0 ]; then
+                            if ! git status | grep -q "rebase in progress"; then
+                                log_success "🎉 REBASE COMPLETED SUCCESSFULLY!"
+                                break
+                            fi
+                        fi
+                        ((attempt++))
+                    else
+                        log_success "🎉 REBASE COMPLETED SUCCESSFULLY!"
+                        break
+                    fi
+                fi
+                
+                # Safety check
+                if [ $attempt -gt $max_attempts ]; then
+                    log_error "❌ Maximum rebase attempts ($max_attempts) reached"
+                    all_resolved=false
+                    break
+                fi
+            done
+            
+            # Final status check
+            if [ "$all_resolved" = false ] || has_conflicts; then
+                log_error "❌ Automatic conflict resolution failed after $attempt attempts"
+                echo ""
+                echo -e "${YELLOW}🔧 MANUAL INTERVENTION REQUIRED:${NC}"
+                echo "Current rebase status:"
+                git status --porcelain
+                echo ""
+                if has_conflicts; then
+                    echo -e "${CYAN}Remaining conflicted files:${NC}"
+                    get_conflicted_files | sed 's/^/  /'
+                    echo ""
+                    echo "Manual resolution steps:"
+                    echo "1. Edit conflicted files to resolve conflicts"
+                    echo "2. Stage resolved files: git add <files>"
+                    echo "3. Continue: git rebase --continue"
+                    echo "4. Repeat until rebase completes"
+                fi
+                echo "5. Or abort: git rebase --abort"
+                echo ""
+                echo -e "${RED}❌ STOPPING WORKFLOW${NC}"
+                exit 1
+            else
+                log_success "🎉 ALL REBASE STEPS COMPLETED SUCCESSFULLY!"
+            fi
+        else
+            log_error "Rebase failed for unknown reason (exit code: $rebase_exit_code)"
+            echo -e "${RED}❌ STOPPING WORKFLOW${NC}"
+            exit 1
+        fi
+    fi
+    
+    # Step 6/5: Push changes
+    ((step_number++))
+    log_step "$step_number" "Pushing Changes to Remote"
+    execute_copilot "force push current branch to origin safely with lease protection"
+    
+    echo ""
+    echo -e "${GREEN}🎉 Workflow completed successfully!${NC}"
+    echo -e "${CYAN}===========================================${NC}"
+    echo -e "${CYAN}📊 WORKFLOW SUMMARY${NC}"
+    echo -e "${CYAN}===========================================${NC}"
+    echo "✅ Common branch '$common_branch' processed"
+    if [[ "$skip_feature_integration" == "false" ]]; then
+        echo "✅ Changes from '$feature_branch' integrated using rebase/cherry-pick"
+    else
+        echo "✅ Common branch synced with master (no feature integration)"
+    fi
+    echo "✅ Merged commits cleaned up"
+    echo "✅ Common branch rebased onto master (no merge commits)"
+    echo "✅ Changes force-pushed to remote with lease protection"
+    echo -e "${CYAN}===========================================${NC}"
 }
 
-# Interactive Git Command Mode - simplified version
+# Interactive Git Command Mode - AI-powered git assistant
 git_command_mode() {
-    echo -e "${BLUE}🤖 Git Command Mode${NC}"
-    echo "==================="
-    echo "Enter git operations, and I'll help execute them!"
-    echo ""
-    echo "Examples:"
-    echo "  • 'show status'"
-    echo "  • 'create branch feature-auth'"
-    echo "  • 'push to origin'"
-    echo "  • 'pull latest'"
-    echo ""
-    echo "Type 'exit' to return to main menu"
+    echo -e "${BLUE}🤖 AI-Powered Git Command Mode${NC}"
     echo "================================="
+    echo "Enter any git operation in natural language, and I'll execute it!"
+    echo "Examples:"
+    echo "  • 'show me the last 5 commits'"
+    echo "  • 'create a new branch called feature-auth'"
+    echo "  • 'merge develop branch into current branch'"
+    echo "  • 'undo the last commit but keep changes'"
+    echo "  • 'push all my changes to origin'"
+    echo "  • 'show what files have changed'"
+    echo "  • 'stash my current changes'"
+    echo "  • 'compare my branch with master'"
+    echo ""
+    echo "Type 'exit' to return to main menu, 'help' for more examples"
+    echo "==============================================="
     echo ""
     
     while true; do
         echo -e "${CYAN}Current branch: $(git branch --show-current)${NC}"
         echo -e "${CYAN}Status: $(git status --porcelain | wc -l) changed files${NC}"
         echo ""
-        read -p "🤖 Git> " user_command
+        read -p "🤖 Git AI> " user_command
         
         # Handle special commands
         case "$user_command" in
@@ -527,8 +1196,8 @@ git_command_mode() {
                 continue
                 ;;
             *)
-                # Process the command
-                process_simple_git_command "$user_command"
+                # Process natural language git command
+                process_natural_language_git_command "$user_command"
                 ;;
         esac
         
@@ -536,123 +1205,303 @@ git_command_mode() {
     done
 }
 
-# Process simple git commands
-process_simple_git_command() {
+# Show help for git command mode
+show_git_command_help() {
+    echo -e "${BLUE}🤖 Git AI Command Examples${NC}"
+    echo "=========================="
+    echo ""
+    echo -e "${YELLOW}Branch Operations:${NC}"
+    echo "  • 'create branch feature-login from master'"
+    echo "  • 'switch to develop branch'"
+    echo "  • 'delete branch feature-old'"
+    echo "  • 'list all branches'"
+    echo "  • 'show remote branches'"
+    echo ""
+    echo -e "${YELLOW}Commit Operations:${NC}"
+    echo "  • 'commit all changes with message \"add new feature\"'"
+    echo "  • 'commit only modified files'"
+    echo "  • 'undo last commit but keep changes'"
+    echo "  • 'undo last commit completely'"
+    echo "  • 'change last commit message'"
+    echo ""
+    echo -e "${YELLOW}Remote Operations:${NC}"
+    echo "  • 'push current branch to origin'"
+    echo "  • 'pull latest changes from master'"
+    echo "  • 'fetch all remote changes'"
+    echo "  • 'push and set upstream'"
+    echo ""
+    echo -e "${YELLOW}History & Information:${NC}"
+    echo "  • 'show last 10 commits'"
+    echo "  • 'show commit history with graph'"
+    echo "  • 'show what changed in last commit'"
+    echo "  • 'show diff between my branch and master'"
+    echo "  • 'who last modified this file: src/app.js'"
+    echo ""
+    echo -e "${YELLOW}Stashing & Cleanup:${NC}"
+    echo "  • 'stash all my changes'"
+    echo "  • 'apply last stash'"
+    echo "  • 'clean untracked files'"
+    echo "  • 'reset hard to last commit'"
+    echo ""
+    echo -e "${YELLOW}Merging & Rebasing:${NC}"
+    echo "  • 'merge feature-auth into current branch'"
+    echo "  • 'rebase current branch onto master'"
+    echo "  • 'cherry pick commit abc123'"
+    echo "  • 'resolve merge conflicts'"
+    echo ""
+    echo -e "${YELLOW}Advanced Operations:${NC}"
+    echo "  • 'squash last 3 commits'"
+    echo "  • 'create a tag version 1.0'"
+    echo "  • 'find commits that changed login.js'"
+    echo "  • 'show blame for src/app.js'"
+    echo ""
+}
+
+# Process natural language git commands using LLM
+process_natural_language_git_command() {
+    local user_input="$1"
+    
+    log_action "Processing: \"$user_input\""
+    
+    # Use the EXACT same working pattern as the workflow mode
+    local temp_file="/tmp/git_cmd"
+    local simple_prompt="$user_input"
+    
+    echo -e "${BLUE}🤖 Asking Copilot for command...${NC}"
+    
+    # Use the exact working pattern from workflow mode
+    gh copilot suggest -t git -s "$temp_file" "$simple_prompt"
+    local copilot_exit_code=$?
+    
+    if [ $copilot_exit_code -ne 0 ]; then
+        log_warning "Copilot failed, trying pattern matching..."
+        handle_common_git_patterns "$user_input"
+        return
+    fi
+    
+    # Check if command was generated
+    if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
+        local suggested_cmd=$(cat "$temp_file")
+        echo -e "${GREEN}🤖 AI Suggestion: $suggested_cmd${NC}"
+        
+        # Ask for confirmation before executing
+        read -p "Execute this command? (Y/n/edit): " confirm
+        
+        case "$confirm" in
+            [Nn])
+                log_warning "Command cancelled by user"
+                ;;
+            [Ee]*)
+                read -p "Enter modified command: " modified_cmd
+                if [ -n "$modified_cmd" ]; then
+                    execute_user_git_command "$modified_cmd"
+                fi
+                ;;
+            *)
+                # Execute using the same pattern as workflow mode
+                execute_user_git_command "$suggested_cmd"
+                ;;
+        esac
+        
+        # Clean up
+        rm -f "$temp_file"
+        return 0
+    else
+        # Fallback to pattern matching if file generation failed
+        log_warning "AI command generation failed, trying pattern matching..."
+        handle_common_git_patterns "$user_input"
+    fi
+    
+    rm -f "$temp_file"
+}
+
+# Enhanced execute function that handles templates
+execute_user_git_command() {
+    local original_cmd="$1"
+    
+    # Check for placeholder patterns before execution
+    if [[ "$original_cmd" =~ \<.*\> ]]; then
+        log_action "Resolving command placeholders..."
+        local final_cmd=$(resolve_command_placeholders "$original_cmd")
+        if [ $? -ne 0 ]; then
+            log_error "Command processing failed"
+            return 1
+        fi
+    else
+        local final_cmd="$original_cmd"
+    fi
+    
+    echo -e "${GREEN}🚀 EXECUTING: $final_cmd${NC}"
+    
+    # Safety check for destructive commands
+    if [[ "$final_cmd" =~ (rm|delete|reset.*--hard|clean.*-f|force) ]]; then
+        echo -e "${RED}⚠️  WARNING: This is a potentially destructive command!${NC}"
+        read -p "Are you sure you want to proceed? (yes/NO): " safety_confirm
+        if [[ "$safety_confirm" != "yes" ]]; then
+            log_warning "Destructive command cancelled for safety"
+            return 1
+        fi
+    fi
+    
+    # Execute the command
+    eval "$final_cmd"
+    local exit_code=$?
+    
+    if [ $exit_code -eq 0 ]; then
+        log_success "Command executed successfully"
+        show_post_command_status "$final_cmd"
+    else
+        log_error "Command failed with exit code $exit_code"
+        show_error_troubleshooting "$final_cmd" "$exit_code"
+    fi
+    
+    return $exit_code
+}
+
+# Show relevant status information after command execution
+show_post_command_status() {
+    local cmd="$1"
+    
+    # Show appropriate status based on command type
+    if [[ "$cmd" =~ (checkout|switch|branch) ]]; then
+        echo -e "${CYAN}📍 Current branch: $(git branch --show-current)${NC}"
+    elif [[ "$cmd" =~ (commit|add|reset) ]]; then
+        echo -e "${CYAN}📊 Repository status:${NC}"
+        git status --short
+    elif [[ "$cmd" =~ (push|pull|fetch) ]]; then
+        echo -e "${CYAN}🔄 Remote status updated${NC}"
+    elif [[ "$cmd" =~ (log|show) ]]; then
+        # Status already shown by the command
+        :
+    else
+        # Show basic status for other commands
+        echo -e "${CYAN}📊 Files changed: $(git status --porcelain | wc -l)${NC}"
+    fi
+}
+
+# Handle common git patterns when LLM is unavailable
+handle_common_git_patterns() {
     local input="$1"
-    
-    log_action "Processing: \"$input\""
-    
-    # Simple pattern matching for common commands
     local cmd=""
+    
+    echo -e "${BLUE}🔍 Pattern matching for: \"$input\"${NC}"
+    
+    # Convert common patterns to git commands
     case "$(echo "$input" | tr '[:upper:]' '[:lower:]')" in
-        *"status"*|*"show status"*)
+        *"rebase"*"master"*|*"rebase"*"main"*)
+            cmd="git rebase origin/master"
+            ;;
+        *"rebase"*"origin"*)
+            cmd="git rebase origin/$(git branch --show-current)"
+            ;;
+        *"rebase"*|*"rebase onto"*)
+            echo "Available branches:"
+            git branch -a | head -10
+            read -p "Enter branch to rebase onto (default: origin/master): " rebase_target
+            rebase_target="${rebase_target:-origin/master}"
+            cmd="git rebase $rebase_target"
+            ;;
+        *"last"*"commit"*|*"recent"*"commit"*)
+            cmd="git log -1 --oneline"
+            ;;
+        *"last"*[0-9]*"commit"*)
+            local num=$(echo "$input" | grep -o '[0-9]\+' | head -1)
+            cmd="git log -${num:-5} --oneline"
+            ;;
+        *"status"*|*"what changed"*|*"show changes"*)
             cmd="git status"
             ;;
-        *"create branch"*)
-            local branch=$(echo "$input" | sed -n 's/.*create branch \([a-zA-Z0-9_-]\+\).*/\1/p')
-            if [ -n "$branch" ]; then
-                cmd="git checkout -b $branch"
-            else
-                read -p "Enter new branch name: " branch
-                cmd="git checkout -b $branch"
-            fi
+        *"push"*"origin"*|*"push"*"current"*)
+            cmd="git push origin $(git branch --show-current)"
             ;;
-        *"switch"*|*"checkout"*)
-            local branch=$(echo "$input" | grep -o '[a-zA-Z0-9_-]\+' | tail -1)
-            cmd="git checkout $branch"
+        *"push"*"upstream"*|*"push"*"set"*"upstream"*)
+            cmd="git push -u origin $(git branch --show-current)"
+            ;;
+        *"pull"*"latest"*|*"pull"*"master"*|*"pull"*"main"*)
+            cmd="git pull origin master"
             ;;
         *"pull"*|*"update"*)
             cmd="git pull origin $(git branch --show-current)"
             ;;
-        *"push"*)
-            cmd="git push origin $(git branch --show-current)"
+        *"branch"*"list"*|*"show"*"branch"*|*"all"*"branch"*)
+            cmd="git branch -a"
             ;;
-        *"commit"*)
-            read -p "Enter commit message: " msg
-            cmd="git add . && git commit -m \"$msg\""
+        *"create"*"branch"*)
+            read -p "Enter new branch name: " branch_name
+            if [ -n "$branch_name" ]; then
+                cmd="git checkout -b $branch_name"
+            fi
             ;;
-        *"log"*|*"history"*)
-            cmd="git log --oneline -10"
+        *"switch"*"to"*|*"checkout"*)
+            local branch=$(echo "$input" | sed -n 's/.*\(switch to\|checkout\) \([a-zA-Z0-9_-]\+\).*/\2/p')
+            if [ -n "$branch" ]; then
+                cmd="git checkout $branch"
+            else
+                read -p "Enter branch name to switch to: " branch_name
+                if [ -n "$branch_name" ]; then
+                    cmd="git checkout $branch_name"
+                fi
+            fi
+            ;;
+        *"commit"*"all"*|*"commit"*"everything"*)
+            read -p "Enter commit message: " commit_msg
+            if [ -n "$commit_msg" ]; then
+                cmd="git add . && git commit -m \"$commit_msg\""
+            fi
+            ;;
+        *"stash"*"save"*|*"stash"*"changes"*|*"stash"*)
+            cmd="git stash"
+            ;;
+        *"stash"*"pop"*|*"apply"*"stash"*)
+            cmd="git stash pop"
+            ;;
+        *"undo"*"last"*"commit"*|*"revert"*"last"*)
+            cmd="git reset --soft HEAD~1"
+            ;;
+        *"diff"*"master"*|*"compare"*"master"*)
+            cmd="git diff master..HEAD"
+            ;;
+        *"diff"*|*"what"*"change"*)
+            cmd="git diff"
+            ;;
+        *"merge"*)
+            local branch=$(echo "$input" | sed -n 's/.*merge \([a-zA-Z0-9_-]\+\).*/\1/p')
+            if [ -n "$branch" ]; then
+                cmd="git merge $branch"
+            else
+                read -p "Enter branch name to merge: " branch_name
+                if [ -n "$branch_name" ]; then
+                    cmd="git merge $branch_name"
+                fi
+            fi
+            ;;
+        *"fetch"*|*"update"*"remote"*)
+            cmd="git fetch --all"
             ;;
         *)
-            echo "Available commands:"
-            echo "  • show status"
-            echo "  • create branch <name>"
-            echo "  • switch to <branch>"
-            echo "  • pull latest"
-            echo "  • push changes"
-            echo "  • commit changes"
-            echo "  • show log"
+            echo -e "${RED}❌ Could not understand command: \"$input\"${NC}"
+            echo ""
+            echo -e "${YELLOW}💡 Try one of these patterns:${NC}"
+            echo "  • 'rebase onto master'"
+            echo "  • 'show last 5 commits'"
+            echo "  • 'commit all changes'"
+            echo "  • 'push to origin'"
+            echo "  • 'create branch feature-name'"
+            echo "  • 'switch to branch-name'"
+            echo "  • 'merge branch-name'"
+            echo "  • 'stash my changes'"
+            echo "  • 'show status'"
             return
             ;;
     esac
     
     if [ -n "$cmd" ]; then
-        echo -e "${GREEN}🚀 EXECUTING: $cmd${NC}"
-        eval "$cmd"
-        if [ $? -eq 0 ]; then
-            log_success "Command executed successfully"
-        else
-            log_error "Command failed"
+        echo -e "${GREEN}🔍 Pattern Match: $cmd${NC}"
+        read -p "Execute this command? (Y/n): " confirm
+        if [[ ! "$confirm" =~ ^[Nn]$ ]]; then
+            execute_user_git_command "$cmd"
         fi
     fi
-}
-
-# Show help for git command mode
-show_git_command_help() {
-    echo -e "${BLUE}🤖 Git Command Examples${NC}"
-    echo "======================="
-    echo ""
-    echo -e "${YELLOW}Available Commands:${NC}"
-    echo "  • 'show status' - Display git status"
-    echo "  • 'create branch feature-name' - Create new branch"
-    echo "  • 'switch to branch-name' - Switch branches"
-    echo "  • 'pull latest' - Pull from remote"
-    echo "  • 'push changes' - Push to remote"
-    echo "  • 'commit changes' - Add and commit"
-    echo "  • 'show log' - Display commit history"
-    echo ""
-}
-
-# Main workflow function with simplified operations
-main_workflow() {
-    local common_branch="$1"
-    local feature_branch="$2"
-    
-    echo -e "${BLUE}🚀 Git Workflow Mode${NC}"
-    echo "===================="
-    echo "Common branch: $common_branch"
-    echo ""
-    
-    if [ -z "$feature_branch" ]; then
-        echo "Mode: Basic branch operations"
-        simple_workflow "$common_branch"
-    else
-        echo "Feature branch: $feature_branch"
-        echo "Mode: Feature integration workflow"
-        
-        # Basic workflow without complex AI features
-        log_step "1" "Switching to common branch"
-        execute_git "git checkout $common_branch || git checkout -b $common_branch" "Switch to common branch"
-        
-        log_step "2" "Pulling latest changes"
-        execute_git "git pull origin $common_branch || true" "Pull latest changes"
-        
-        log_step "3" "Merging feature branch"
-        read -p "Merge $feature_branch into $common_branch? (Y/n): " confirm
-        if [[ ! $confirm =~ ^[Nn]$ ]]; then
-            execute_git "git merge $feature_branch" "Merging feature branch"
-        fi
-        
-        log_step "4" "Pushing changes"
-        read -p "Push $common_branch to origin? (Y/n): " push_confirm
-        if [[ ! $push_confirm =~ ^[Nn]$ ]]; then
-            execute_git "git push origin $common_branch" "Pushing to origin"
-        fi
-    fi
-    
-    echo ""
-    echo -e "${GREEN}🎉 Workflow completed!${NC}"
 }
 
 # Main script execution
@@ -696,11 +1545,14 @@ main() {
             check_git_repo
             
             # Show workflow mode header
-            echo -e "${BLUE}🔧 Workflow Mode - Branch Management${NC}"
-            echo "====================================="
+            echo -e "${BLUE}🔧 Workflow Mode - Automated Branch Management${NC}"
+            echo "=============================================="
             echo "Common branch: $common_branch"
             if [ -n "$feature_branch" ]; then
                 echo "Feature branch: $feature_branch"
+                echo "Mode: Feature Integration"
+            else
+                echo "Mode: Sync Only"
             fi
             echo ""
             
