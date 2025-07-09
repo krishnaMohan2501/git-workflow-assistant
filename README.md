@@ -35,6 +35,60 @@ An intelligent Git workflow automation script powered by AI that simplifies bran
 - **Python 3** - for smart conflict resolution
 - **Bash 4.0+** - for script execution
 
+#### **Installing Prerequisites**
+
+**Git:**
+```bash
+# macOS
+brew install git
+
+# Ubuntu/Debian
+sudo apt update && sudo apt install git
+
+# Windows
+# Download from https://git-scm.com/download/win
+```
+
+**GitHub CLI:**
+```bash
+# macOS
+brew install gh
+
+# Ubuntu/Debian
+curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+sudo apt update && sudo apt install gh
+
+# Windows
+# Download from https://cli.github.com/
+
+# Setup authentication and AI features
+gh auth login
+gh extension install github/gh-copilot
+```
+
+**Python 3:**
+```bash
+# macOS
+brew install python3
+
+# Ubuntu/Debian
+sudo apt update && sudo apt install python3 python3-pip
+
+# Windows
+# Download from https://python.org/downloads/
+```
+
+**Bash 4.0+ (macOS users):**
+```bash
+# macOS ships with old Bash 3.x, upgrade to 4.0+
+brew install bash
+
+# Add to your shell config
+echo 'export PATH="/opt/homebrew/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+```
+
 ### **🚀 Quick Installation**
 
 ```bash
@@ -186,6 +240,12 @@ export GIT_WORKFLOW_DEBUG=1
 # Authenticate with GitHub
 gh auth login
 
+# Install the Copilot extension for AI features
+gh extension install github/gh-copilot
+
+# Test it works
+gh copilot suggest -t git "show git status"
+
 # Verify installation
 gh --version
 ```
@@ -235,7 +295,18 @@ gh pr create --title "feat: add amazing new feature"
 
 ### Common Issues
 
-**Q: "Command not found: gh"**
+**Q: "Command not found: git"**
+```bash
+# Install Git
+# macOS
+brew install git
+
+# Ubuntu/Debian
+sudo apt update && sudo apt install git
+
+# Verify installation
+git --version
+```
 ```bash
 # Install GitHub CLI
 # macOS
@@ -245,6 +316,10 @@ brew install gh
 curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
 sudo apt update && sudo apt install gh
+
+# Then install Copilot extension
+gh auth login
+gh extension install github/gh-copilot
 ```
 
 **Q: How do I uninstall the tool?**
